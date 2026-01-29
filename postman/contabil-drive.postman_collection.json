@@ -1,0 +1,392 @@
+{
+  "info": {
+    "name": "Contábil Drive Backend (V1)",
+    "_postman_id": "b7b1f02d-6c9d-4e9a-9b86-2b7b6e8a0f21",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /auth/login-admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.environment.set('adminAccessToken', json.accessToken);",
+                  "  pm.environment.set('adminRefreshToken', json.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login-admin",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login-admin"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/login-client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.environment.set('clientAccessToken', json.accessToken);",
+                  "  pm.environment.set('clientRefreshToken', json.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cnpj\": \"{{clientCnpj}}\",\n  \"password\": \"{{clientPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login-client",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login-client"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/refresh (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.environment.set('adminAccessToken', json.accessToken);",
+                  "  pm.environment.set('adminRefreshToken', json.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{adminRefreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/refresh (client)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.environment.set('clientAccessToken', json.accessToken);",
+                  "  pm.environment.set('clientRefreshToken', json.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{clientRefreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/logout (admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{adminRefreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/logout (client)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{clientRefreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin (Bearer)",
+      "item": [
+        {
+          "name": "GET /admin/clients",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/clients",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "clients"]
+            }
+          }
+        },
+        {
+          "name": "GET /admin/clients/:id",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/clients/{{clientId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "clients", "{{clientId}}"]
+            }
+          }
+        },
+        {
+          "name": "POST /admin/clients",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cnpj\": \"12.345.678/0001-90\",\n  \"name\": \"ACME Contabilidade\",\n  \"password\": \"SenhaForte123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/clients",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "clients"]
+            }
+          }
+        },
+        {
+          "name": "PATCH /admin/clients/:id",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cliente Atualizado\",\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/clients/{{clientId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "clients", "{{clientId}}"]
+            }
+          }
+        },
+        {
+          "name": "POST /admin/clients/:clientId/folders",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parentId\": null,\n  \"name\": \"2026\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/clients/{{clientId}}/folders",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "clients", "{{clientId}}", "folders"]
+            }
+          }
+        },
+        {
+          "name": "GET /admin/clients/:clientId/folders",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/clients/{{clientId}}/folders?parentId={{parentFolderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "clients", "{{clientId}}", "folders"],
+              "query": [
+                { "key": "parentId", "value": "{{parentFolderId}}", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /admin/folders/:folderId/files (multipart)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] },
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "file", "type": "file", "src": [] }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/folders/{{folderId}}/files",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "folders", "{{folderId}}", "files"]
+            }
+          }
+        },
+        {
+          "name": "GET /admin/folders/:folderId/files",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/folders/{{folderId}}/files",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "folders", "{{folderId}}", "files"]
+            }
+          }
+        },
+        {
+          "name": "GET /admin/files/:id/signed-url",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/files/{{fileId}}/signed-url",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "files", "{{fileId}}", "signed-url"]
+            }
+          }
+        },
+        {
+          "name": "DELETE /admin/files/:id",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/admin/files/{{fileId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "files", "{{fileId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Client (Bearer)",
+      "item": [
+        {
+          "name": "GET /client/me",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{clientAccessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/client/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["client", "me"]
+            }
+          }
+        },
+        {
+          "name": "GET /client/folders",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{clientAccessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/client/folders?parentId={{parentFolderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["client", "folders"],
+              "query": [
+                { "key": "parentId", "value": "{{parentFolderId}}", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /client/files",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{clientAccessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/client/files?folderId={{folderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["client", "files"],
+              "query": [{ "key": "folderId", "value": "{{folderId}}" }]
+            }
+          }
+        },
+        {
+          "name": "GET /client/files/:id/signed-url",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{clientAccessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/client/files/{{fileId}}/signed-url",
+              "host": ["{{baseUrl}}"],
+              "path": ["client", "files", "{{fileId}}", "signed-url"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+
