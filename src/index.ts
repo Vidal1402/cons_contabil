@@ -7,7 +7,9 @@ async function main() {
   await ensureIndexes();
 
   const app = buildServer();
-  await app.listen({ host: env.HOST, port: env.PORT });
+  // No Render/Heroku a porta é injetada (ex: 10000); é obrigatório escutar em 0.0.0.0
+  const host = env.PORT === 4000 ? env.HOST : "0.0.0.0";
+  await app.listen({ host, port: env.PORT });
 }
 
 main().catch((err) => {
