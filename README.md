@@ -265,7 +265,7 @@ Assim o backend fica acessível por uma URL (ex: para seu frontend ou app).
 
 4. Preencha:
    - **Runtime:** Node  
-   - **Build Command:** `npm install && npm run build`  
+   - **Build Command:** exatamente `npm install && npm run build` (não use só `npm install`, senão a pasta `dist/` não é criada e o deploy falha com "Cannot find module dist/index.js").  
    - **Start Command:** `npm start`  
 
 5. Em **Environment** (variáveis de ambiente), **adicione uma por uma** (nunca coloque senhas no código nem no README):

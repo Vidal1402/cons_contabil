@@ -9,7 +9,10 @@ export type StringIdDoc = { _id: string; [k: string]: unknown };
 
 export async function connectDb(): Promise<Db> {
   if (db) return db;
-  client = new MongoClient(env.MONGODB_URI);
+  client = new MongoClient(env.MONGODB_URI, {
+    // Evita ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR em ambientes como Render/Node 25
+    autoSelectFamily: false
+  });
   await client.connect();
   db = client.db();
   return db;

@@ -1,0 +1,11 @@
+# Render Blueprint — use estes comandos no Dashboard se não usar Blueprint
+# Build Command: npm install && npm run build
+# Start Command: npm start
+
+services:
+  - type: web
+    name: contabil-drive-backend
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
