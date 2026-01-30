@@ -3,9 +3,8 @@ import { z } from "zod";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  HOST: z
-    .string()
-    .default(process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1"),
+  // Render/Heroku etc. injetam PORT; nesse caso é preciso escutar em 0.0.0.0
+  HOST: z.string().default(process.env.PORT ? "0.0.0.0" : "127.0.0.1"),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   LOG_LEVEL: z.string().default("info"),
 
