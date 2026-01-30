@@ -1,29 +1,45 @@
-import { Pool } from "pg";
+import { MongoClient, Db, Collection } from "mongodb";
 import { env } from "./config";
-import type { QueryResultRow } from "pg";
 
-export const pool = new Pool({
-  connectionString: env.DATABASE_URL,
-  // Em produção, prefira validação do certificado.
-  ssl: env.NODE_ENV === "production" ? { rejectUnauthorized: true } : { rejectUnauthorized: false }
-});
+let client: MongoClient;
+let db: Db;
 
-export async function query<T extends QueryResultRow = any>(text: string, params?: any[]) {
-  return pool.query<T>(text, params);
+/** Documentos usam _id como string (UUID). */
+export type StringIdDoc = { _id: string; [k: string]: unknown };
+
+export async function connectDb(): Promise<Db> {
+  if (db) return db;
+  client = new MongoClient(env.MONGODB_URI);
+  await client.connect();
+  db = client.db();
+  return db;
 }
 
-export async function withTx<T>(fn: (client: import("pg").PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const res = await fn(client);
-    await client.query("COMMIT");
-    return res;
-  } catch (e) {
-    await client.query("ROLLBACK");
-    throw e;
-  } finally {
-    client.release();
-  }
+export function getDb(): Db {
+  if (!db) throw new Error("DB não conectado. Chame connectDb() antes.");
+  return db;
+}
+
+/** Coleções usam _id como string (UUID). Retorna Collection<any> para evitar conflito ObjectId vs string. */
+export function getColl(name: string): Collection<any> {
+  return getDb().collection(name);
+}
+
+/** Filtro por _id string (evita conflito ObjectId vs string). */
+export function byId(id: string): { _id: string } {
+  return { _id: id };
+}
+
+/** Garante índices nas coleções (rodar no startup). */
+export async function ensureIndexes(): Promise<void> {
+  const d = getDb();
+  await d.collection("users").createIndex({ email: 1 }, { unique: true, sparse: true });
+  await d.collection("users").createIndex({ cnpj: 1 }, { unique: true, sparse: true });
+  await d.collection("clients").createIndex({ cnpj: 1 }, { unique: true });
+  await d.collection("clients").createIndex({ user_id: 1 }, { unique: true });
+  await d.collection("folders").createIndex({ client_id: 1, parent_id: 1, name: 1 }, { unique: true });
+  await d.collection("refresh_tokens").createIndex({ token_hash: 1 }, { unique: true });
+  await d.collection("refresh_tokens").createIndex({ user_id: 1 });
+  await d.collection("file_objects").createIndex({ storage_key: 1 }, { unique: true });
 }
 

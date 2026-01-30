@@ -1,12 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { normalizeCnpj, isValidCnpjDigitsOnly } from "../utils/cnpj";
-import { hashPassword } from "../security/password";
-import { withTx, query } from "../db";
-import { supabase, storageBucket } from "../storage/supabase";
-import { sanitizeFilename } from "../utils/filename";
 import { randomUUID } from "node:crypto";
 import crypto from "node:crypto";
+import { normalizeCnpj, isValidCnpjDigitsOnly } from "../utils/cnpj";
+import { hashPassword } from "../security/password";
+import { getColl, byId } from "../db";
+import { supabase, storageBucket } from "../storage/supabase";
+import { sanitizeFilename } from "../utils/filename";
 
 const createClientSchema = z.object({
   cnpj: z.string().min(1),
@@ -28,26 +28,39 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", app.requireAdmin);
 
   app.get("/clients", async () => {
-    const res = await query<{ id: string; cnpj: string; name: string; is_active: boolean; created_at: string }>(
-      `SELECT id, cnpj, name, is_active, created_at
-       FROM client
-       ORDER BY created_at DESC`
-    );
-    return { clients: res.rows };
+    const rows = await getColl("clients")
+      .find({})
+      .sort({ created_at: -1 })
+      .toArray() as Array<{ _id: string; cnpj: string; name: string; is_active: boolean; created_at: Date }>;
+    return {
+      clients: rows.map((r) => ({
+        id: r._id,
+        cnpj: r.cnpj,
+        name: r.name,
+        is_active: r.is_active,
+        created_at: r.created_at
+      }))
+    };
   });
 
   app.get<{ Params: { id: string } }>("/clients/:id", async (req, reply) => {
     const id = z.string().uuid().parse(req.params.id);
-    const res = await query(
-      `SELECT c.id, c.cnpj, c.name, c.is_active, c.created_at, u.id AS user_id, u.is_active AS user_active, u.last_login_at
-       FROM client c
-       JOIN app_user u ON u.id = c.user_id
-       WHERE c.id = $1
-       LIMIT 1`,
-      [id]
-    );
-    if (res.rowCount === 0) return reply.notFound("Cliente não encontrado");
-    return { client: res.rows[0] };
+    const client = await getColl("clients").findOne(byId(id)) as Record<string, unknown> | null;
+    if (!client) return reply.notFound("Cliente não encontrado");
+    const user = await getColl("users").findOne(byId(client.user_id as string)) as Record<string, unknown> | null;
+    if (!user) return reply.notFound("Cliente não encontrado");
+    return {
+      client: {
+        id: client._id,
+        cnpj: client.cnpj,
+        name: client.name,
+        is_active: client.is_active,
+        created_at: client.created_at,
+        user_id: client.user_id,
+        user_active: user.is_active,
+        last_login_at: user.last_login_at ?? null
+      }
+    };
   });
 
   app.post("/clients", async (req, reply) => {
@@ -56,63 +69,71 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     if (!isValidCnpjDigitsOnly(cnpj)) return reply.badRequest("CNPJ inválido");
 
     const passwordHash = await hashPassword(body.password);
+    const userId = randomUUID();
+    const clientId = randomUUID();
+    const now = new Date();
 
-    const created = await withTx(async (client) => {
-      const userRes = await client.query<{ id: string }>(
-        `INSERT INTO app_user (role, cnpj, password_hash, is_active)
-         VALUES ('CLIENT', $1, $2, true)
-         RETURNING id`,
-        [cnpj, passwordHash]
-      );
-      const userId = userRes.rows[0]!.id;
-
-      const clientRes = await client.query<{ id: string }>(
-        `INSERT INTO client (cnpj, name, user_id, is_active)
-         VALUES ($1, $2, $3, true)
-         RETURNING id`,
-        [cnpj, body.name, userId]
-      );
-
-      await client.query(
-        `INSERT INTO audit_log (actor_user_id, client_id, action, entity, entity_id, meta, ip, user_agent)
-         VALUES ($1, $2, 'CREATE', 'client', $2, jsonb_build_object('cnpj', $3), $4, $5)`,
-        [req.user!.id, clientRes.rows[0]!.id, cnpj, req.ip, req.headers["user-agent"] ?? null]
-      );
-
-      return { clientId: clientRes.rows[0]!.id, userId };
+    await getColl("users").insertOne({
+      _id: userId,
+      role: "CLIENT",
+      cnpj,
+      password_hash: passwordHash,
+      is_active: true,
+      created_at: now,
+      updated_at: now
     });
+    await getColl("clients").insertOne({
+      _id: clientId,
+      cnpj,
+      name: body.name,
+      user_id: userId,
+      is_active: true,
+      created_at: now,
+      updated_at: now
+    });
+    await getColl("audit_logs").insertOne({
+      _id: randomUUID(),
+      actor_user_id: req.user!.id,
+      client_id: clientId,
+      action: "CREATE",
+      entity: "client",
+      entity_id: clientId,
+      meta: { cnpj },
+      ip: req.ip,
+      user_agent: req.headers["user-agent"] ?? null,
+      created_at: now
+    } as any);
 
-    return reply.code(201).send({ id: created.clientId });
+    return reply.code(201).send({ id: clientId });
   });
 
   app.patch<{ Params: { id: string } }>("/clients/:id", async (req, reply) => {
     const id = z.string().uuid().parse(req.params.id);
     const body = updateClientSchema.parse(req.body);
 
-    const existing = await query<{ user_id: string }>("SELECT user_id FROM client WHERE id = $1 LIMIT 1", [id]);
-    if (existing.rowCount === 0) return reply.notFound("Cliente não encontrado");
-    const userId = existing.rows[0]!.user_id;
+    const client = await getColl("clients").findOne(byId(id)) as { user_id: string } | null;
+    if (!client) return reply.notFound("Cliente não encontrado");
+    const userId = client.user_id;
 
-    await withTx(async (client) => {
-      if (typeof body.name === "string") {
-        await client.query("UPDATE client SET name = $2 WHERE id = $1", [id, body.name]);
-      }
-      if (typeof body.isActive === "boolean") {
-        await client.query("UPDATE client SET is_active = $2 WHERE id = $1", [id, body.isActive]);
-        await client.query("UPDATE app_user SET is_active = $2 WHERE id = $1", [userId, body.isActive]);
-      }
-      await client.query(
-        `INSERT INTO audit_log (actor_user_id, client_id, action, entity, entity_id, meta, ip, user_agent)
-         VALUES ($1, $2, 'UPDATE', 'client', $2, $3::jsonb, $4, $5)`,
-        [
-          req.user!.id,
-          id,
-          JSON.stringify(body),
-          req.ip,
-          req.headers["user-agent"] ?? null
-        ]
-      );
-    });
+    if (typeof body.name === "string") {
+      await getColl("clients").updateOne({ _id: id }, { $set: { name: body.name, updated_at: new Date() } });
+    }
+    if (typeof body.isActive === "boolean") {
+      await getColl("clients").updateOne({ _id: id }, { $set: { is_active: body.isActive, updated_at: new Date() } });
+      await getColl("users").updateOne({ _id: userId }, { $set: { is_active: body.isActive, updated_at: new Date() } });
+    }
+    await getColl("audit_logs").insertOne({
+      _id: randomUUID(),
+      actor_user_id: req.user!.id,
+      client_id: id,
+      action: "UPDATE",
+      entity: "client",
+      entity_id: id,
+      meta: body,
+      ip: req.ip,
+      user_agent: req.headers["user-agent"] ?? null,
+      created_at: new Date()
+    } as any);
 
     return { ok: true };
   });
@@ -122,24 +143,25 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const body = createFolderSchema.parse(req.body);
     const parentId = body.parentId ?? null;
 
-    const exists = await query("SELECT id FROM client WHERE id = $1 LIMIT 1", [clientId]);
-    if (exists.rowCount === 0) return reply.notFound("Cliente não encontrado");
+    const client = await getColl("clients").findOne(byId(clientId));
+    if (!client) return reply.notFound("Cliente não encontrado");
 
     if (parentId) {
-      const parent = await query<{ id: string }>(
-        "SELECT id FROM folder WHERE id = $1 AND client_id = $2 LIMIT 1",
-        [parentId, clientId]
-      );
-      if (parent.rowCount === 0) return reply.badRequest("Pasta pai inválida");
+      const parent = await getColl("folders").findOne({ _id: parentId, client_id: clientId } as any);
+      if (!parent) return reply.badRequest("Pasta pai inválida");
     }
 
-    const res = await query<{ id: string }>(
-      `INSERT INTO folder (client_id, parent_id, name)
-       VALUES ($1, $2, $3)
-       RETURNING id`,
-      [clientId, parentId, body.name]
-    );
-    return reply.code(201).send({ id: res.rows[0]!.id });
+    const folderId = randomUUID();
+    const now = new Date();
+    await getColl("folders").insertOne({
+      _id: folderId,
+      client_id: clientId,
+      parent_id: parentId,
+      name: body.name,
+      created_at: now,
+      updated_at: now
+    } as any);
+    return reply.code(201).send({ id: folderId });
   });
 
   app.get<{ Params: { clientId: string }; Querystring: { parentId?: string } }>(
@@ -148,22 +170,31 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       const clientId = z.string().uuid().parse(req.params.clientId);
       const parentId = req.query.parentId ? z.string().uuid().parse(req.query.parentId) : null;
 
-      const res = await query(
-        `SELECT id, client_id, parent_id, name, created_at, updated_at
-         FROM folder
-         WHERE client_id = $1 AND parent_id IS NOT DISTINCT FROM $2
-         ORDER BY name ASC`,
-        [clientId, parentId]
-      );
-      return reply.send({ folders: res.rows });
+      const filter: Record<string, unknown> = { client_id: clientId };
+      filter.parent_id = parentId ?? null;
+
+      const rows = await getColl("folders")
+        .find(filter)
+        .sort({ name: 1 })
+        .toArray();
+      return reply.send({
+        folders: rows.map((r) => ({
+          id: r._id,
+          client_id: r.client_id,
+          parent_id: r.parent_id,
+          name: r.name,
+          created_at: r.created_at,
+          updated_at: r.updated_at
+        }))
+      });
     }
   );
 
   app.post<{ Params: { folderId: string } }>("/folders/:folderId/files", async (req, reply) => {
     const folderId = z.string().uuid().parse(req.params.folderId);
-    const folderRes = await query<{ client_id: string }>("SELECT client_id FROM folder WHERE id = $1 LIMIT 1", [folderId]);
-    if (folderRes.rowCount === 0) return reply.notFound("Pasta não encontrada");
-    const clientId = folderRes.rows[0]!.client_id;
+    const folder = await getColl("folders").findOne(byId(folderId) as any) as { client_id: string } | null;
+    if (!folder) return reply.notFound("Pasta não encontrada");
+    const clientId = folder.client_id;
 
     const part = await req.file();
     if (!part) return reply.badRequest("Arquivo obrigatório (multipart field: file)");
@@ -183,63 +214,67 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       return reply.internalServerError("Falha no upload");
     }
 
-    const inserted = await query<{ id: string }>(
-      `INSERT INTO file_object (client_id, folder_id, storage_key, original_filename, content_type, size_bytes, sha256_hex)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id`,
-      [clientId, folderId, storageKey, original, part.mimetype, buf.length, sha256]
-    );
+    const fileId = randomUUID();
+    const now = new Date();
+    await getColl("file_objects").insertOne({
+      _id: fileId,
+      client_id: clientId,
+      folder_id: folderId,
+      storage_key: storageKey,
+      original_filename: original,
+      content_type: part.mimetype,
+      size_bytes: buf.length,
+      sha256_hex: sha256,
+      created_at: now
+    } as any);
 
-    return reply.code(201).send({ id: inserted.rows[0]!.id });
+    return reply.code(201).send({ id: fileId });
   });
 
   app.get<{ Params: { folderId: string } }>("/folders/:folderId/files", async (req, reply) => {
     const folderId = z.string().uuid().parse(req.params.folderId);
-    const folderRes = await query<{ client_id: string }>("SELECT client_id FROM folder WHERE id = $1 LIMIT 1", [folderId]);
-    if (folderRes.rowCount === 0) return reply.notFound("Pasta não encontrada");
-    const clientId = folderRes.rows[0]!.client_id;
+    const folder = await getColl("folders").findOne(byId(folderId)) as { client_id: string } | null;
+    if (!folder) return reply.notFound("Pasta não encontrada");
+    const clientId = folder.client_id;
 
-    const res = await query(
-      `SELECT id, original_filename, content_type, size_bytes, sha256_hex, created_at
-       FROM file_object
-       WHERE client_id = $1 AND folder_id = $2 AND deleted_at IS NULL
-       ORDER BY created_at DESC`,
-      [clientId, folderId]
-    );
-    return reply.send({ files: res.rows });
+    const rows = await getColl("file_objects")
+      .find({ client_id: clientId, folder_id: folderId, deleted_at: null })
+      .sort({ created_at: -1 })
+      .toArray();
+    return reply.send({
+      files: (rows as Array<Record<string, unknown>>).map((r) => ({
+        id: r._id,
+        original_filename: r.original_filename,
+        content_type: r.content_type,
+        size_bytes: r.size_bytes,
+        sha256_hex: r.sha256_hex,
+        created_at: r.created_at
+      }))
+    });
   });
 
   app.get<{ Params: { id: string } }>("/files/:id/signed-url", async (req, reply) => {
     const id = z.string().uuid().parse(req.params.id);
-    const res = await query<{ storage_key: string }>(
-      "SELECT storage_key FROM file_object WHERE id = $1 AND deleted_at IS NULL LIMIT 1",
-      [id]
-    );
-    if (res.rowCount === 0) return reply.notFound("Arquivo não encontrado");
-    const storageKey = res.rows[0]!.storage_key;
+    const file = await getColl("file_objects").findOne({ _id: id, deleted_at: null } as any) as { storage_key: string } | null;
+    if (!file) return reply.notFound("Arquivo não encontrado");
 
-    const signed = await supabase.storage.from(storageBucket).createSignedUrl(storageKey, 60);
+    const signed = await supabase.storage.from(storageBucket).createSignedUrl(file.storage_key, 60);
     if (signed.error || !signed.data?.signedUrl) return reply.internalServerError("Falha ao gerar link");
     return reply.send({ url: signed.data.signedUrl, expiresIn: 60 });
   });
 
   app.delete<{ Params: { id: string } }>("/files/:id", async (req, reply) => {
     const id = z.string().uuid().parse(req.params.id);
-    const res = await query<{ storage_key: string }>(
-      "SELECT storage_key FROM file_object WHERE id = $1 AND deleted_at IS NULL LIMIT 1",
-      [id]
-    );
-    if (res.rowCount === 0) return reply.notFound("Arquivo não encontrado");
-    const storageKey = res.rows[0]!.storage_key;
+    const file = await getColl("file_objects").findOne({ _id: id, deleted_at: null } as any) as { storage_key: string } | null;
+    if (!file) return reply.notFound("Arquivo não encontrado");
 
-    const removed = await supabase.storage.from(storageBucket).remove([storageKey]);
+    const removed = await supabase.storage.from(storageBucket).remove([file.storage_key]);
     if (removed.error) {
       req.log.error({ err: removed.error }, "storage_remove_failed");
       return reply.internalServerError("Falha ao excluir no storage");
     }
 
-    await query("UPDATE file_object SET deleted_at = now() WHERE id = $1", [id]);
+    await getColl("file_objects").updateOne(byId(id), { $set: { deleted_at: new Date() } });
     return reply.send({ ok: true });
   });
 };
-

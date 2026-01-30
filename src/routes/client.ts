@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { query } from "../db";
+import { getColl, byId } from "../db";
 import { supabase, storageBucket } from "../storage/supabase";
 
 export const clientRoutes: FastifyPluginAsync = async (app) => {
@@ -14,46 +14,56 @@ export const clientRoutes: FastifyPluginAsync = async (app) => {
     const clientId = req.user!.clientId!;
     const parentId = req.query.parentId ? z.string().uuid().parse(req.query.parentId) : null;
 
-    const res = await query(
-      `SELECT id, parent_id, name, created_at, updated_at
-       FROM folder
-       WHERE client_id = $1 AND parent_id IS NOT DISTINCT FROM $2
-       ORDER BY name ASC`,
-      [clientId, parentId]
-    );
-    return { folders: res.rows };
+    const filter: Record<string, unknown> = { client_id: clientId };
+    filter.parent_id = parentId ?? null;
+
+    const rows = await getColl("folders")
+      .find(filter)
+      .sort({ name: 1 })
+      .toArray();
+    return {
+      folders: (rows as Array<Record<string, unknown>>).map((r) => ({
+        id: r._id,
+        parent_id: r.parent_id,
+        name: r.name,
+        created_at: r.created_at,
+        updated_at: r.updated_at
+      }))
+    };
   });
 
   app.get<{ Querystring: { folderId: string } }>("/files", async (req, reply) => {
     const clientId = req.user!.clientId!;
     const folderId = z.string().uuid().parse(req.query.folderId);
 
-    const folder = await query("SELECT id FROM folder WHERE id = $1 AND client_id = $2 LIMIT 1", [folderId, clientId]);
-    if (folder.rowCount === 0) return reply.notFound("Pasta não encontrada");
+    const folder = await getColl("folders").findOne({ _id: folderId, client_id: clientId });
+    if (!folder) return reply.notFound("Pasta não encontrada");
 
-    const res = await query(
-      `SELECT id, original_filename, content_type, size_bytes, sha256_hex, created_at
-       FROM file_object
-       WHERE client_id = $1 AND folder_id = $2 AND deleted_at IS NULL
-       ORDER BY created_at DESC`,
-      [clientId, folderId]
-    );
-    return reply.send({ files: res.rows });
+    const rows = await getColl("file_objects")
+      .find({ client_id: clientId, folder_id: folderId, deleted_at: null })
+      .sort({ created_at: -1 })
+      .toArray();
+    return reply.send({
+      files: (rows as Array<Record<string, unknown>>).map((r) => ({
+        id: r._id,
+        original_filename: r.original_filename,
+        content_type: r.content_type,
+        size_bytes: r.size_bytes,
+        sha256_hex: r.sha256_hex,
+        created_at: r.created_at
+      }))
+    });
   });
 
   app.get<{ Params: { id: string } }>("/files/:id/signed-url", async (req, reply) => {
     const clientId = req.user!.clientId!;
     const id = z.string().uuid().parse(req.params.id);
 
-    const res = await query<{ storage_key: string }>(
-      "SELECT storage_key FROM file_object WHERE id = $1 AND client_id = $2 AND deleted_at IS NULL LIMIT 1",
-      [id, clientId]
-    );
-    if (res.rowCount === 0) return reply.notFound("Arquivo não encontrado");
+    const file = await getColl("file_objects").findOne({ ...byId(id), client_id: clientId, deleted_at: null } as any) as { storage_key: string } | null;
+    if (!file) return reply.notFound("Arquivo não encontrado");
 
-    const signed = await supabase.storage.from(storageBucket).createSignedUrl(res.rows[0]!.storage_key, 60);
+    const signed = await supabase.storage.from(storageBucket).createSignedUrl(file.storage_key, 60);
     if (signed.error || !signed.data?.signedUrl) return reply.internalServerError("Falha ao gerar link");
     return reply.send({ url: signed.data.signedUrl, expiresIn: 60 });
   });
 };
-

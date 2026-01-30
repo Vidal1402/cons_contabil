@@ -3,11 +3,16 @@ import { z } from "zod";
 import { env } from "../config";
 import { normalizeCnpj, isValidCnpjDigitsOnly } from "../utils/cnpj";
 import { verifyPassword } from "../security/password";
-import { findAdminByEmail, findClientByCnpj, touchLastLogin } from "../repos/users";
+import {
+  findAdminByEmail,
+  findClientByCnpj,
+  touchLastLogin,
+  getUserRoleAndClient,
+  isClientActive
+} from "../repos/users";
 import { randomToken, sha256Hex } from "../utils/crypto";
 import { insertRefreshToken, findRefreshTokenByHash, revokeRefreshToken, rotateRefreshToken } from "../repos/refreshTokens";
 import { signAccessToken } from "../security/jwt";
-import { query } from "../db";
 
 const loginAdminSchema = z.object({
   email: z.string().email(),
@@ -22,27 +27,6 @@ const loginClientSchema = z.object({
 const refreshSchema = z.object({
   refreshToken: z.string().min(20)
 });
-
-async function getUserRoleAndClient(userId: string) {
-  const res = await query<{ role: "ADMIN" | "CLIENT"; is_active: boolean; cnpj: string | null; client_id: string | null }>(
-    `SELECT
-        u.role,
-        u.is_active,
-        u.cnpj,
-        c.id AS client_id
-     FROM app_user u
-     LEFT JOIN client c ON c.user_id = u.id
-     WHERE u.id = $1
-     LIMIT 1`,
-    [userId]
-  );
-  return res.rows[0] ?? null;
-}
-
-async function isClientActive(clientId: string) {
-  const res = await query<{ is_active: boolean }>("SELECT is_active FROM client WHERE id = $1 LIMIT 1", [clientId]);
-  return res.rows[0]?.is_active ?? false;
-}
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
   app.post(

@@ -7,7 +7,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   LOG_LEVEL: z.string().default("info"),
 
-  DATABASE_URL: z.string().min(1, "DATABASE_URL é obrigatório"),
+  MONGODB_URI: z.string().min(1, "MONGODB_URI é obrigatório (ex: mongodb+srv://user:pass@cluster.mongodb.net/dbname)"),
 
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, "SUPABASE_SERVICE_ROLE_KEY é obrigatório"),
@@ -23,16 +23,33 @@ const envSchema = z.object({
   LOGIN_RATE_LIMIT_WINDOW: z.coerce.number().int().min(1).max(3600).default(60),
   MAX_UPLOAD_BYTES: z.coerce.number().int().min(1_048_576).max(1_073_741_824).default(52_428_800),
 
-  BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
-  BOOTSTRAP_ADMIN_PASSWORD: z.string().min(12).optional(),
+  // Opcionais: string vazia no .env vira undefined (pode deixar em branco)
+  BOOTSTRAP_ADMIN_EMAIL: z.preprocess((v) => (v === "" ? undefined : v), z.string().email().optional()),
+  BOOTSTRAP_ADMIN_PASSWORD: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(12).max(200).optional()),
 
-  // Seed (dev) - cria também um cliente de teste
-  SEED_CLIENT_CNPJ: z.string().min(1).optional(),
-  SEED_CLIENT_NAME: z.string().min(1).max(200).optional(),
-  SEED_CLIENT_PASSWORD: z.string().min(12).max(200).optional()
+  SEED_CLIENT_CNPJ: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).max(14).optional()),
+  SEED_CLIENT_NAME: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).max(200).optional()),
+  SEED_CLIENT_PASSWORD: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(12).max(200).optional())
 });
 
-export const env = envSchema.parse(process.env);
+function loadEnv() {
+  const result = envSchema.safeParse(process.env);
+  if (result.success) return result.data;
+
+  const missing = result.error.issues.map((i) => i.path.join(".")).filter(Boolean);
+  // eslint-disable-next-line no-console
+  console.error(
+    "\n\u274c Variáveis de ambiente faltando ou inválidas.\n\n" +
+      "1) Copie o arquivo .env.example para .env:\n   copy .env.example .env\n\n" +
+      "2) Abra .env e preencha pelo menos:\n   " +
+      missing.join(", ") +
+      "\n\n" +
+      "Consulte o README para onde obter cada valor (Supabase, JWT, etc.).\n"
+  );
+  throw result.error;
+}
+
+export const env = loadEnv();
 
 export type Env = typeof env;
 

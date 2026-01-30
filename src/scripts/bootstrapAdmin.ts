@@ -1,5 +1,6 @@
+import "dotenv/config";
 import { env } from "../config";
-import { query } from "../db";
+import { connectDb, getColl, ensureIndexes } from "../db";
 import { hashPassword } from "../security/password";
 
 async function main() {
@@ -10,19 +11,30 @@ async function main() {
     throw new Error("Defina BOOTSTRAP_ADMIN_EMAIL e BOOTSTRAP_ADMIN_PASSWORD no .env para criar o primeiro ADM.");
   }
 
-  const exists = await query<{ id: string }>("SELECT id FROM app_user WHERE role = 'ADMIN' LIMIT 1");
-  if ((exists.rowCount ?? 0) > 0) {
+  await connectDb();
+  await ensureIndexes();
+
+  const existing = await getColl("users").findOne({ role: "ADMIN" });
+  if (existing) {
     // eslint-disable-next-line no-console
     console.log("Admin já existe. Nada a fazer.");
     return;
   }
 
+  const { randomUUID } = await import("node:crypto");
+  const userId = randomUUID();
   const passwordHash = await hashPassword(password);
-  await query(
-    `INSERT INTO app_user (role, email, cnpj, password_hash, is_active)
-     VALUES ('ADMIN', $1, NULL, $2, true)`,
-    [email.toLowerCase(), passwordHash]
-  );
+  const now = new Date();
+
+  await getColl("users").insertOne({
+    _id: userId,
+    role: "ADMIN",
+    email: email.toLowerCase(),
+    password_hash: passwordHash,
+    is_active: true,
+    created_at: now,
+    updated_at: now
+  } as any);
 
   // eslint-disable-next-line no-console
   console.log("Admin criado com sucesso.");
@@ -33,4 +45,3 @@ main().catch((err) => {
   console.error(err);
   process.exitCode = 1;
 });
-
