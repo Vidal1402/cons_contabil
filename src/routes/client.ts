@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { getColl, byId } from "../db";
-import { supabase, storageBucket } from "../storage/supabase";
+import * as gridfs from "../storage/gridfs";
 
 export const clientRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", app.requireClient);
@@ -58,12 +58,22 @@ export const clientRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { id: string } }>("/files/:id/signed-url", async (req, reply) => {
     const clientId = req.user!.clientId!;
     const id = z.string().uuid().parse(req.params.id);
-
-    const file = await getColl("file_objects").findOne({ ...byId(id), client_id: clientId, deleted_at: null } as any) as { storage_key: string } | null;
+    const file = await getColl("file_objects").findOne({ ...byId(id), client_id: clientId, deleted_at: null } as any);
     if (!file) return reply.notFound("Arquivo não encontrado");
+    return reply.send({
+      url: `/client/files/${id}/stream`,
+      expiresIn: 60
+    });
+  });
 
-    const signed = await supabase.storage.from(storageBucket).createSignedUrl(file.storage_key, 60);
-    if (signed.error || !signed.data?.signedUrl) return reply.internalServerError("Falha ao gerar link");
-    return reply.send({ url: signed.data.signedUrl, expiresIn: 60 });
+  app.get<{ Params: { id: string } }>("/files/:id/stream", async (req, reply) => {
+    const clientId = req.user!.clientId!;
+    const id = z.string().uuid().parse(req.params.id);
+    const file = await getColl("file_objects").findOne({ ...byId(id), client_id: clientId, deleted_at: null } as any) as { gridfs_id: string; original_filename: string; content_type: string } | null;
+    if (!file) return reply.notFound("Arquivo não encontrado");
+    const stream = gridfs.getDownloadStream(file.gridfs_id);
+    reply.header("Content-Type", file.content_type);
+    reply.header("Content-Disposition", `inline; filename="${file.original_filename}"`);
+    return reply.send(stream);
   });
 };

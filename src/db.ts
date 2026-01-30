@@ -40,6 +40,6 @@ export async function ensureIndexes(): Promise<void> {
   await d.collection("folders").createIndex({ client_id: 1, parent_id: 1, name: 1 }, { unique: true });
   await d.collection("refresh_tokens").createIndex({ token_hash: 1 }, { unique: true });
   await d.collection("refresh_tokens").createIndex({ user_id: 1 });
-  await d.collection("file_objects").createIndex({ storage_key: 1 }, { unique: true });
+  await d.collection("file_objects").createIndex({ gridfs_id: 1 }, { unique: true });
 }
 

@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import { normalizeCnpj, isValidCnpjDigitsOnly } from "../utils/cnpj";
 import { hashPassword } from "../security/password";
 import { getColl, byId } from "../db";
-import { supabase, storageBucket } from "../storage/supabase";
+import * as gridfs from "../storage/gridfs";
 import { sanitizeFilename } from "../utils/filename";
 
 const createClientSchema = z.object({
@@ -202,15 +202,12 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const original = sanitizeFilename(part.filename);
     const buf = await part.toBuffer();
     const sha256 = crypto.createHash("sha256").update(buf).digest("hex");
-    const objectId = randomUUID();
-    const storageKey = `clients/${clientId}/folders/${folderId}/${objectId}-${original}`;
 
-    const upload = await supabase.storage.from(storageBucket).upload(storageKey, buf, {
-      contentType: part.mimetype,
-      upsert: false
-    });
-    if (upload.error) {
-      req.log.error({ err: upload.error }, "storage_upload_failed");
+    let gridfsId: string;
+    try {
+      gridfsId = await gridfs.upload(buf, original, part.mimetype);
+    } catch (err) {
+      req.log.error({ err }, "storage_upload_failed");
       return reply.internalServerError("Falha no upload");
     }
 
@@ -220,7 +217,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       _id: fileId,
       client_id: clientId,
       folder_id: folderId,
-      storage_key: storageKey,
+      gridfs_id: gridfsId,
       original_filename: original,
       content_type: part.mimetype,
       size_bytes: buf.length,
@@ -255,25 +252,34 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get<{ Params: { id: string } }>("/files/:id/signed-url", async (req, reply) => {
     const id = z.string().uuid().parse(req.params.id);
-    const file = await getColl("file_objects").findOne({ _id: id, deleted_at: null } as any) as { storage_key: string } | null;
+    const file = await getColl("file_objects").findOne({ _id: id, deleted_at: null } as any);
     if (!file) return reply.notFound("Arquivo não encontrado");
+    return reply.send({
+      url: `/admin/files/${id}/stream`,
+      expiresIn: 60
+    });
+  });
 
-    const signed = await supabase.storage.from(storageBucket).createSignedUrl(file.storage_key, 60);
-    if (signed.error || !signed.data?.signedUrl) return reply.internalServerError("Falha ao gerar link");
-    return reply.send({ url: signed.data.signedUrl, expiresIn: 60 });
+  app.get<{ Params: { id: string } }>("/files/:id/stream", async (req, reply) => {
+    const id = z.string().uuid().parse(req.params.id);
+    const file = await getColl("file_objects").findOne({ _id: id, deleted_at: null } as any) as { gridfs_id: string; original_filename: string; content_type: string } | null;
+    if (!file) return reply.notFound("Arquivo não encontrado");
+    const stream = gridfs.getDownloadStream(file.gridfs_id);
+    reply.header("Content-Type", file.content_type);
+    reply.header("Content-Disposition", `inline; filename="${file.original_filename}"`);
+    return reply.send(stream);
   });
 
   app.delete<{ Params: { id: string } }>("/files/:id", async (req, reply) => {
     const id = z.string().uuid().parse(req.params.id);
-    const file = await getColl("file_objects").findOne({ _id: id, deleted_at: null } as any) as { storage_key: string } | null;
+    const file = await getColl("file_objects").findOne({ _id: id, deleted_at: null } as any) as { gridfs_id: string } | null;
     if (!file) return reply.notFound("Arquivo não encontrado");
-
-    const removed = await supabase.storage.from(storageBucket).remove([file.storage_key]);
-    if (removed.error) {
-      req.log.error({ err: removed.error }, "storage_remove_failed");
-      return reply.internalServerError("Falha ao excluir no storage");
+    try {
+      await gridfs.remove(file.gridfs_id);
+    } catch (err) {
+      req.log.error({ err }, "storage_remove_failed");
+      return reply.internalServerError("Falha ao excluir arquivo");
     }
-
     await getColl("file_objects").updateOne(byId(id), { $set: { deleted_at: new Date() } });
     return reply.send({ ok: true });
   });

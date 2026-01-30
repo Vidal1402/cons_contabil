@@ -9,10 +9,6 @@ const envSchema = z.object({
 
   MONGODB_URI: z.string().min(1, "MONGODB_URI é obrigatório (ex: mongodb+srv://user:pass@cluster.mongodb.net/dbname)"),
 
-  SUPABASE_URL: z.string().url(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, "SUPABASE_SERVICE_ROLE_KEY é obrigatório"),
-  SUPABASE_STORAGE_BUCKET: z.string().min(1).default("contabil-docs"),
-
   JWT_PRIVATE_KEY_PEM: z.string().min(1, "JWT_PRIVATE_KEY_PEM é obrigatório"),
   JWT_PUBLIC_KEY_PEM: z.string().min(1, "JWT_PUBLIC_KEY_PEM é obrigatório"),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
@@ -44,7 +40,7 @@ function loadEnv() {
       "2) Abra .env e preencha pelo menos:\n   " +
       missing.join(", ") +
       "\n\n" +
-      "Consulte o README para onde obter cada valor (Supabase, JWT, etc.).\n"
+      "Consulte o README para onde obter cada valor (MongoDB, JWT, etc.).\n"
   );
   throw result.error;
 }

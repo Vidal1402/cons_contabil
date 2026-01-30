@@ -18,11 +18,7 @@ npm run gen-jwt-keys
 
 Copie/cole as duas linhas no seu `.env` (`JWT_PRIVATE_KEY_PEM` e `JWT_PUBLIC_KEY_PEM`).
 
-3) Configure `.env` (copie de `.env.example`) e rode migrations:
-
-```bash
-npm run migrate:dev
-```
+3) Configure `.env` (copie de `.env.example` e preencha MONGODB_URI, JWT, PASSWORD_PEPPER).
 
 4) Crie usuário(s) de teste (admin + cliente + pasta “2026”):
 
@@ -277,14 +273,20 @@ Resposta:
 
 #### `GET /admin/files/:id/signed-url`
 
-Resposta:
+Resposta: retorna a URL do próprio backend para baixar o arquivo (use com o mesmo Bearer token).
 
 ```json
 {
-  "url": "<signedUrl>",
+  "url": "/admin/files/<id>/stream",
   "expiresIn": 60
 }
 ```
+
+Para baixar o arquivo: `GET <baseUrl>/admin/files/:id/stream` com header `Authorization: Bearer <token>`.
+
+#### `GET /admin/files/:id/stream`
+
+Stream do arquivo (requer Bearer admin). Use a URL retornada por signed-url; envie o mesmo token.
 
 #### `DELETE /admin/files/:id`
 
@@ -320,5 +322,9 @@ Resposta: igual ao admin.
 
 #### `GET /client/files/:id/signed-url`
 
-Resposta: igual ao admin.
+Resposta: igual ao admin (`url`: `/client/files/<id>/stream`).
+
+#### `GET /client/files/:id/stream`
+
+Stream do arquivo (requer Bearer cliente). Use a URL retornada por signed-url; envie o mesmo token.
 
