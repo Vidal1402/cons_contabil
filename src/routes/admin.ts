@@ -64,9 +64,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/clients", async (req, reply) => {
-    const body = createClientSchema.parse(req.body);
+    const parsed = createClientSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const msg = parsed.error.issues.map((i) => i.message).join("; ") || "Dados inválidos";
+      return reply.code(400).send({ error: msg });
+    }
+    const body = parsed.data;
     const cnpj = normalizeCnpj(body.cnpj);
-    if (!isValidCnpjDigitsOnly(cnpj)) return reply.badRequest("CNPJ inválido");
+    if (!isValidCnpjDigitsOnly(cnpj)) return reply.code(400).send({ error: "CNPJ inválido" });
 
     const passwordHash = await hashPassword(body.password);
     const userId = randomUUID();

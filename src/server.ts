@@ -37,8 +37,9 @@ export function buildServer() {
   });
 
   app.register(cors, {
-    origin: env.NODE_ENV === "development" ? true : false,
-    credentials: false
+    origin: true,
+    credentials: false,
+    allowedHeaders: ["Content-Type", "Authorization"]
   });
 
   app.register(rateLimit, {
@@ -65,6 +66,7 @@ export function buildServer() {
 
   app.setErrorHandler((err, req, reply) => {
     req.log.error({ err }, "request_error");
+    if (reply.sent) return;
     const statusCode = (err as any)?.statusCode ?? 500;
     const safeStatus = Number.isInteger(statusCode) ? statusCode : 500;
     const message = safeStatus >= 500 ? "Erro interno" : (err as any)?.message ?? "Erro";
