@@ -24,10 +24,10 @@ declare module "fastify" {
 export const authPlugin: FastifyPluginAsync = fp(async (app) => {
   app.decorateRequest("user", null);
 
-  app.decorate("authenticate", async (req, reply) => {
+  app.decorate("authenticate", async (req) => {
     const header = req.headers.authorization || "";
     const [, token] = header.split(" ");
-    if (!token) return reply.unauthorized("Não autenticado");
+    if (!token) throw app.httpErrors.unauthorized("Não autenticado");
 
     try {
       const claims = await verifyAccessToken(token);
@@ -38,21 +38,21 @@ export const authPlugin: FastifyPluginAsync = fp(async (app) => {
         cnpj: claims.cnpj
       };
     } catch {
-      return reply.unauthorized("Token inválido");
+      throw app.httpErrors.unauthorized("Token inválido");
     }
   });
 
-  app.decorate("requireAdmin", async (req, reply) => {
-    await app.authenticate(req, reply);
+  app.decorate("requireAdmin", async (req) => {
+    await app.authenticate(req, {} as FastifyReply);
     if (!req.user) return;
-    if (req.user.role !== "ADMIN") return reply.forbidden("Apenas administrador");
+    if (req.user.role !== "ADMIN") throw app.httpErrors.forbidden("Apenas administrador");
   });
 
-  app.decorate("requireClient", async (req, reply) => {
-    await app.authenticate(req, reply);
+  app.decorate("requireClient", async (req) => {
+    await app.authenticate(req, {} as FastifyReply);
     if (!req.user) return;
-    if (req.user.role !== "CLIENT") return reply.forbidden("Apenas cliente");
-    if (!req.user.clientId) return reply.forbidden("Cliente sem vínculo");
+    if (req.user.role !== "CLIENT") throw app.httpErrors.forbidden("Apenas cliente");
+    if (!req.user.clientId) throw app.httpErrors.forbidden("Cliente sem vínculo");
   });
 });
 

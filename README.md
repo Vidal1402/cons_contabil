@@ -1,308 +1,268 @@
-# Contábil Drive Backend
+# Contábil Drive — API para o frontend
 
-Backend para organizar e disponibilizar documentos contábeis (tipo um “drive”): **só usa MongoDB**. Nada de Supabase.
-
----
-
-## O que você precisa ter
-
-1. **Node.js 20 ou mais** instalado no computador.  
-   Se não tiver: baixe em [nodejs.org](https://nodejs.org) e instale.
-
-2. **Uma conta no MongoDB Atlas** (é grátis).  
-   Se não tiver: entre em [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas) e crie uma conta.
+Instruções para o frontend se conectar à API do Contábil Drive.
 
 ---
 
-## Passo a passo para rodar na sua máquina
+## Base URL
 
-Siga na ordem. Cada passo é uma coisa só.
+| Ambiente | URL |
+|----------|-----|
+| **Produção** | `https://cons-contabili.onrender.com` |
+| **Local** | `http://127.0.0.1:4000` |
+
+Use uma variável de ambiente no front (ex: `VITE_API_URL` ou `NEXT_PUBLIC_API_URL`) e aponte para uma dessas URLs.
 
 ---
 
-### Passo 1 — Abrir a pasta do projeto no terminal
+## Autenticação
 
-- Abra o terminal (PowerShell ou CMD) na pasta do projeto: `contabil-drive-backend`.
+Todas as rotas protegidas exigem o header:
 
----
-
-### Passo 2 — Instalar as dependências
-
-Digite e aperte Enter:
-
-```bash
-npm install
+```http
+Authorization: Bearer <ACCESS_TOKEN>
 ```
 
-Espere terminar. Isso baixa tudo que o projeto precisa.
+### Fluxo
+
+1. **Login** → `POST /auth/login-admin` ou `POST /auth/login-client` → recebe `accessToken` e `refreshToken`.
+2. **Requisições** → envie `accessToken` no header `Authorization: Bearer <token>`.
+3. **Token expirado** → chame `POST /auth/refresh` com o `refreshToken` e use o novo `accessToken`.
+4. **Logout** → chame `POST /auth/logout` com o `refreshToken`.
 
 ---
 
-### Passo 3 — Criar o arquivo `.env`
+## Endpoints e exemplos JSON
 
-O `.env` é um arquivo onde você coloca suas senhas e chaves **só no seu computador**. Nunca mande esse arquivo para ninguém nem suba no Git.
+### Health
 
-1. Na pasta do projeto, copie o arquivo de exemplo:
-   - No PowerShell: `copy .env.example .env`
-   - No CMD: `copy .env.example .env`
-
-2. Abra o arquivo `.env` com o Bloco de Notas (ou outro editor) e vá preenchendo os itens abaixo.
+| Método | Rota | Resposta |
+|--------|------|----------|
+| GET | `/health` | `{ "ok": true }` |
 
 ---
 
-### Passo 4 — Preencher a conexão do MongoDB (MONGODB_URI)
+### Auth (público)
 
-O backend guarda **tudo** no MongoDB: usuários, clientes, pastas e **os arquivos** (PDFs, etc.). Por isso a única conexão que importa é a do MongoDB.
+#### `POST /auth/login-admin`
 
-1. Entre no [MongoDB Atlas](https://cloud.mongodb.com) e faça login.
+**Body:**
 
-2. Abra o seu projeto e clique no botão **“Database”**.
-
-3. No seu cluster, clique em **“Connect”**.
-
-4. Escolha **“Drivers”** (ou “Connect your application”).
-
-5. Copie a **connection string** que aparecer. Ela é parecida com:
-   ```text
-   mongodb+srv://USUARIO:<password>@cluster0.xxxxx.mongodb.net/?appName=...
-   ```
-
-6. Troque na string:
-   - **USUARIO**: o usuário que você criou no Atlas (Database Access).
-   - **&lt;password&gt;**: a senha desse usuário.
-
-   **Importante:** se a senha tiver caracteres especiais (`@`, `$`, `/`, `#`, etc.), você precisa **codificar**:
-   - `@` → `%40`
-   - `$` → `%24`
-   - `/` → `%2F`
-   - `#` → `%23`
-
-   Exemplo: se a senha for `C0n$u/t4_187`, use na URL: `C0n%24u%2Ft4_187`.
-
-7. Coloque o **nome do banco** na URL. Depois do host, antes do `?`, coloque `/contabil_drive`.  
-   Exemplo (troque pelo seu usuário, senha codificada e host):
-   ```text
-   mongodb+srv://cons_contabil:C0n%24u%2Ft4_187@cluster0.auxzinv.mongodb.net/contabil_drive?retryWrites=true&w=majority
-   ```
-
-8. No `.env`, na linha do `MONGODB_URI`, cole essa URL inteira:
-   ```env
-   MONGODB_URI=mongodb+srv://SEU_USUARIO:SUA_SENHA_CODIFICADA@cluster0.xxxxx.mongodb.net/contabil_drive?retryWrites=true&w=majority
-   ```
-
-9. No Atlas, em **“Network Access”**, libere o acesso (por exemplo “Allow access from anywhere” com `0.0.0.0/0`) para sua máquina conseguir conectar.
-
----
-
-### Passo 5 — Gerar as chaves JWT (login seguro)
-
-O sistema usa “chaves” para criar os tokens de login. Você gera uma vez e cola no `.env`.
-
-1. No terminal, na pasta do projeto, rode:
-   ```bash
-   npm run gen-jwt-keys
-   ```
-
-2. O comando vai **escrever duas linhas longas** no terminal (começam com `JWT_PRIVATE_KEY_PEM=` e `JWT_PUBLIC_KEY_PEM=`).
-
-3. **Copie essas duas linhas** e **cole no seu arquivo `.env`**, apagando as linhas antigas de `JWT_PRIVATE_KEY_PEM` e `JWT_PUBLIC_KEY_PEM` (se existirem).
-
-4. Salve o `.env`.
-
----
-
-### Passo 6 — Preencher o PASSWORD_PEPPER
-
-No `.env` tem uma linha `PASSWORD_PEPPER=`.  
-Ela é um “tempero” extra na senha (segurança). Pode ser qualquer frase ou texto com **pelo menos 16 caracteres**, sem espaços. Exemplo:
-
-```env
-PASSWORD_PEPPER=MinhaFraseSecreta2024
+```json
+{
+  "email": "admin@exemplo.com",
+  "password": "SenhaForte123!"
+}
 ```
 
-Salve o `.env`.
+**Resposta:**
 
----
-
-### Passo 7 — Criar o primeiro usuário admin (só uma vez)
-
-Antes de usar o sistema, você precisa criar **um** usuário administrador.
-
-1. No `.env`, preencha:
-   ```env
-   BOOTSTRAP_ADMIN_EMAIL=admin@seusite.com
-   BOOTSTRAP_ADMIN_PASSWORD=UmaSenhaForteCom12Caracteres!
-   ```
-   (Troque pelo seu e-mail e uma senha forte.)
-
-2. No terminal, rode:
-   ```bash
-   npm run bootstrap-admin:dev
-   ```
-
-3. Se aparecer algo como “Admin criado” ou sem erro, está certo. Esse comando **só precisa ser rodado uma vez**.
-
----
-
-### Passo 8 — (Opcional) Criar cliente e pasta de teste
-
-Se quiser um cliente de teste e uma pasta “2026” já criados:
-
-1. No `.env` você pode deixar ou ajustar:
-   ```env
-   SEED_CLIENT_CNPJ=00000000000000
-   SEED_CLIENT_NAME=Cliente Teste
-   SEED_CLIENT_PASSWORD=SenhaForte123!
-   ```
-
-2. Rode:
-   ```bash
-   npm run seed:dev
-   ```
-
----
-
-### Passo 9 — Subir o servidor
-
-No terminal:
-
-```bash
-npm run dev
+```json
+{
+  "tokenType": "Bearer",
+  "accessToken": "<jwt>",
+  "expiresIn": 900,
+  "refreshToken": "<refresh>"
+}
 ```
 
-Se aparecer algo como “Server listening at http://127.0.0.1:4000”, o backend está no ar.
+#### `POST /auth/login-client`
 
-- **URL do backend:** `http://127.0.0.1:4000`
-- **Teste rápido:** abra no navegador: `http://127.0.0.1:4000/health`  
-  Deve aparecer: `{"ok":true}`
+**Body:**
 
----
-
-## Resumo do que está no `.env`
-
-| Nome no .env | O que é | Obrigatório? |
-|--------------|---------|--------------|
-| `MONGODB_URI` | A URL de conexão do MongoDB Atlas (com usuário, senha codificada e nome do banco `contabil_drive`) | Sim |
-| `JWT_PRIVATE_KEY_PEM` | A linha que o `gen-jwt-keys` gerou (chave privada) | Sim |
-| `JWT_PUBLIC_KEY_PEM` | A linha que o `gen-jwt-keys` gerou (chave pública) | Sim |
-| `PASSWORD_PEPPER` | Uma frase secreta com 16+ caracteres | Sim |
-| `BOOTSTRAP_ADMIN_EMAIL` | E-mail do primeiro admin | Só para criar o admin |
-| `BOOTSTRAP_ADMIN_PASSWORD` | Senha do primeiro admin | Só para criar o admin |
-| `SEED_CLIENT_*` | Dados do cliente de teste | Só se rodar o seed |
-
-Não existe mais nada de Supabase. Tudo (dados e arquivos) fica no MongoDB.
-
----
-
-## Endpoints principais (para conectar o frontend ou Postman)
-
-A **base** é: `http://127.0.0.1:4000` (ou a URL do seu servidor).
-
-Nas rotas que precisam de login, envie no cabeçalho:
-
-```text
-Authorization: Bearer SEU_ACCESS_TOKEN
+```json
+{
+  "cnpj": "00.000.000/0000-00",
+  "password": "SenhaForte123!"
+}
 ```
 
-### Saúde do servidor
+**Resposta:** mesmo formato do login-admin.
 
-- **GET** `/health` → `{"ok":true}`
+#### `POST /auth/refresh`
 
-### Login (público)
+**Body:**
 
-- **POST** `/auth/login-admin`  
-  Body: `{ "email": "admin@...", "password": "..." }`  
-  Resposta: `accessToken`, `refreshToken`, etc.
+```json
+{ "refreshToken": "<refresh>" }
+```
 
-- **POST** `/auth/login-client`  
-  Body: `{ "cnpj": "00.000.000/0000-00", "password": "..." }`  
-  Resposta: igual ao login-admin.
+**Resposta:** novo `accessToken` e novo `refreshToken`.
 
-- **POST** `/auth/refresh`  
-  Body: `{ "refreshToken": "..." }`  
-  Resposta: novo `accessToken` e novo `refreshToken`.
+#### `POST /auth/logout`
 
-- **POST** `/auth/logout`  
-  Body: `{ "refreshToken": "..." }`
+**Body:**
 
-### Admin (precisa do token de admin)
+```json
+{ "refreshToken": "<refresh>" }
+```
 
-- **GET** `/admin/clients` — lista clientes  
-- **GET** `/admin/clients/:id` — um cliente  
-- **POST** `/admin/clients` — criar cliente  
-- **PATCH** `/admin/clients/:id` — atualizar cliente  
-- **POST** `/admin/clients/:clientId/folders` — criar pasta  
-- **GET** `/admin/clients/:clientId/folders` — listar pastas  
-- **POST** `/admin/folders/:folderId/files` — enviar arquivo (multipart, campo `file`)  
-- **GET** `/admin/folders/:folderId/files` — listar arquivos da pasta  
-- **GET** `/admin/files/:id/signed-url` — pega a URL para baixar (retorna algo como `/admin/files/:id/stream`)  
-- **GET** `/admin/files/:id/stream` — baixar o arquivo (mesmo token no header)  
-- **DELETE** `/admin/files/:id` — apagar arquivo  
-
-### Cliente (precisa do token de cliente)
-
-- **GET** `/client/me` — dados do cliente logado  
-- **GET** `/client/folders` — listar pastas  
-- **GET** `/client/files?folderId=...` — listar arquivos da pasta  
-- **GET** `/client/files/:id/signed-url` — URL para baixar  
-- **GET** `/client/files/:id/stream` — baixar o arquivo (mesmo token no header)  
-
-Exemplos de JSON e mais detalhes estão em **`docs/ENDPOINTS-POSTMAN.md`**.
+**Resposta:** `{ "ok": true }`
 
 ---
 
-## Colocar no ar na internet (Render)
+### Admin (Bearer token de admin)
 
-Assim o backend fica acessível por uma URL (ex: para seu frontend ou app).
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/admin/clients` | Lista clientes |
+| GET | `/admin/clients/:id` | Um cliente |
+| POST | `/admin/clients` | Criar cliente |
+| PATCH | `/admin/clients/:id` | Atualizar cliente |
+| POST | `/admin/clients/:clientId/folders` | Criar pasta |
+| GET | `/admin/clients/:clientId/folders?parentId=<uuid>` | Listar pastas |
+| POST | `/admin/folders/:folderId/files` | Upload (multipart, campo `file`) |
+| GET | `/admin/folders/:folderId/files` | Listar arquivos da pasta |
+| GET | `/admin/files/:id/signed-url` | URL para download |
+| GET | `/admin/files/:id/stream` | Baixar arquivo (mesmo token) |
+| DELETE | `/admin/files/:id` | Excluir arquivo |
 
-### O que você faz no site do Render
+**POST /admin/clients** — Body:
 
-1. Entre em [render.com](https://render.com) e faça login.
+```json
+{
+  "cnpj": "12.345.678/0001-90",
+  "name": "ACME Contabilidade",
+  "password": "SenhaForte123!"
+}
+```
 
-2. **New** → **Web Service**.
+Resposta: `{ "id": "<clientId>" }`
 
-3. Conecte o repositório do projeto (GitHub/GitLab).
+**PATCH /admin/clients/:id** — Body (qualquer combinação):
 
-4. Preencha:
-   - **Runtime:** Node  
-   - **Build Command:** exatamente `npm install && npm run build` (não use só `npm install`, senão a pasta `dist/` não é criada e o deploy falha com "Cannot find module dist/index.js").  
-   - **Start Command:** `npm start`  
+```json
+{
+  "name": "Novo Nome",
+  "isActive": true
+}
+```
 
-5. Em **Environment** (variáveis de ambiente), **adicione uma por uma** (nunca coloque senhas no código nem no README):
-   - `NODE_ENV` = `production`
-   - `HOST` = `0.0.0.0`
-   - `MONGODB_URI` = a mesma URL que você usou no `.env` (com usuário e senha codificada)
-   - `JWT_PRIVATE_KEY_PEM` = a mesma linha do seu `.env`
-   - `JWT_PUBLIC_KEY_PEM` = a mesma linha do seu `.env`
-   - `PASSWORD_PEPPER` = o mesmo valor do seu `.env`
+**POST /admin/clients/:clientId/folders** — Body:
 
-6. Não precisa de nenhuma variável de Supabase: **só MongoDB**.
+```json
+{
+  "parentId": null,
+  "name": "2026"
+}
+```
 
-7. Salve e faça o deploy. O Render vai dar uma URL, tipo:  
-   `https://contabil-drive-backend.onrender.com`  
+Resposta: `{ "id": "<folderId>" }`
 
-Use essa URL como “base” dos endpoints (ex: `https://contabil-drive-backend.onrender.com/health`).
+**GET /admin/files/:id/signed-url** — Resposta:
+
+```json
+{
+  "url": "/admin/files/<id>/stream",
+  "expiresIn": 60
+}
+```
+
+Para baixar: `GET <baseUrl>/admin/files/:id/stream` com o mesmo header `Authorization: Bearer <token>` (ou abrir em nova aba/iframe se o backend aceitar e o token for enviado).
 
 ---
 
-## Comandos úteis
+### Cliente (Bearer token de cliente)
 
-| Comando | O que faz |
-|---------|------------|
-| `npm run dev` | Sobe o servidor em modo desenvolvimento (reinicia ao mudar código) |
-| `npm run build` | Gera a pasta `dist/` para produção |
-| `npm start` | Sobe o servidor em produção (usa `dist/`) |
-| `npm run gen-jwt-keys` | Gera as linhas de JWT para colar no `.env` |
-| `npm run bootstrap-admin:dev` | Cria o primeiro usuário admin (uma vez) |
-| `npm run seed:dev` | Cria cliente e pasta de teste (opcional) |
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/client/me` | Dados do cliente logado |
+| GET | `/client/folders?parentId=<uuid>` | Listar pastas |
+| GET | `/client/files?folderId=<uuid>` | Listar arquivos da pasta |
+| GET | `/client/files/:id/signed-url` | URL para download |
+| GET | `/client/files/:id/stream` | Baixar arquivo (mesmo token) |
+
+**GET /client/me** — Resposta:
+
+```json
+{
+  "userId": "<uuid>",
+  "clientId": "<uuid>",
+  "cnpj": "00000000000000"
+}
+```
+
+**GET /client/files/:id/signed-url** — Resposta:
+
+```json
+{
+  "url": "/client/files/<id>/stream",
+  "expiresIn": 60
+}
+```
+
+Para baixar: `GET <baseUrl>/client/files/:id/stream` com o mesmo header `Authorization: Bearer <token>`.
 
 ---
 
-## Resumo
+## Respostas de listagem (exemplo)
 
-- **Só MongoDB:** banco de dados e armazenamento de arquivos (GridFS). Nada de Supabase.
-- **Você configura:** `.env` com `MONGODB_URI`, JWT (gerados com `gen-jwt-keys`) e `PASSWORD_PEPPER`.
-- **Você faz uma vez:** criar admin com `bootstrap-admin:dev` e (se quiser) dados de teste com `seed:dev`.
-- **Para rodar:** `npm run dev`; para colocar na internet: deploy no Render com as mesmas variáveis no painel, sem colocar senhas no código.
+**GET /admin/clients** — Resposta:
 
-Se algo não funcionar, confira: (1) `MONGODB_URI` correta e senha codificada, (2) Network Access no Atlas liberado, (3) JWT e PASSWORD_PEPPER preenchidos no `.env`.
+```json
+{
+  "clients": [
+    {
+      "id": "<uuid>",
+      "cnpj": "00000000000000",
+      "name": "Cliente Teste",
+      "is_active": true,
+      "created_at": "2026-01-28T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+**GET /admin/clients/:clientId/folders** — Resposta:
+
+```json
+{
+  "folders": [
+    {
+      "id": "<uuid>",
+      "client_id": "<uuid>",
+      "parent_id": null,
+      "name": "2026",
+      "created_at": "2026-01-28T00:00:00.000Z",
+      "updated_at": "2026-01-28T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+**GET /admin/folders/:folderId/files** — Resposta:
+
+```json
+{
+  "files": [
+    {
+      "id": "<uuid>",
+      "original_filename": "balancete.pdf",
+      "content_type": "application/pdf",
+      "size_bytes": 12345,
+      "sha256_hex": "<sha256>",
+      "created_at": "2026-01-28T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+## Erros comuns
+
+- **401** — Token inválido ou expirado. Use `/auth/refresh` ou faça login de novo.
+- **404** — Rota ou recurso não encontrado (ex.: rota `/` não existe; use `/health` para testar).
+- **CORS** — Em desenvolvimento a API aceita qualquer origem; em produção o backend pode restringir. Se o front estiver em outro domínio, o backend precisa permitir esse domínio.
+
+---
+
+## Resumo para o front
+
+1. **Base URL:** produção `https://cons-contabili.onrender.com` ou local `http://127.0.0.1:4000`.
+2. **Login:** admin por e-mail/senha, cliente por CNPJ/senha; guardar `accessToken` e `refreshToken`.
+3. **Requisições:** sempre `Authorization: Bearer <accessToken>`.
+4. **Refresh:** quando o token expirar, usar `POST /auth/refresh` com `refreshToken` e atualizar o `accessToken`.
+5. **Download:** obter `url` em `/admin/files/:id/signed-url` ou `/client/files/:id/signed-url` e fazer `GET <baseUrl><url>` com o mesmo token no header.
+
+Documentação detalhada com todos os exemplos: **`docs/ENDPOINTS-POSTMAN.md`**.
