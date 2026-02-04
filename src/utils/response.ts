@@ -20,6 +20,7 @@ export function statusFromMessage(message: string): number {
   const m = message.toLowerCase();
   if (m.includes("não autenticado") || m.includes("token inválido") || m.includes("credenciais") || m.includes("refresh")) return 401;
   if (m.includes("administrador") || m.includes("apenas cliente") || m.includes("cliente sem") || m.includes("proibido")) return 403;
-  if (m.includes("não encontrado") || m.includes("inválido")) return 404;
+  if (m.includes("não encontrado") || m.includes("não encontrada")) return 404;
+  if (m.includes("já cadastrado") || m.includes("já existe")) return 409;
   return 500;
 }
