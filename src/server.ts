@@ -37,25 +37,13 @@ export function buildServer() {
     contentSecurityPolicy: false // API only
   });
 
-  // Rota OPTIONS registrada ANTES do CORS para garantir preflight com DELETE (admin pode apagar arquivos)
-  app.options("*", (req, reply) => {
-    const origin = req.headers.origin || "*";
-    return reply
-      .header("Access-Control-Allow-Origin", origin)
-      .header("Access-Control-Allow-Methods", "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS")
-      .header("Access-Control-Allow-Headers", "Content-Type,Authorization")
-      .header("Access-Control-Max-Age", "86400")
-      .header("Content-Length", "0")
-      .code(204)
-      .send();
-  });
-
   app.register(cors, {
     origin: true,
     credentials: false,
     methods: "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
     allowedHeaders: ["Content-Type", "Authorization"],
-    preflight: false // preflight já respondida pela rota OPTIONS acima
+    preflight: true,
+    optionsSuccessStatus: 204
   });
 
   app.register(rateLimit, {
