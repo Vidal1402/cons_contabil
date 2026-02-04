@@ -105,6 +105,15 @@ export function buildServer() {
       ) {
         return done(null, payload);
       }
+      // Listas e recursos únicos: manter formato { clients }, { folders }, { files }, { client } para o frontend (evita .filter em undefined)
+      const passThroughKeys = ["clients", "folders", "files", "client", "url", "expiresIn", "userId", "clientId", "cnpj"];
+      if (
+        body &&
+        typeof body === "object" &&
+        Object.keys(body).some((k) => passThroughKeys.includes(k))
+      ) {
+        return done(null, payload);
+      }
       // Resposta só com { error } → padronizar para { success: false, error }
       if (body && typeof body === "object" && "error" in body && body.success === undefined) {
         return done(null, JSON.stringify(errorPayload(String(body.error))));
