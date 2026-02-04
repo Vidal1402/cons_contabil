@@ -301,11 +301,10 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.delete<{ Params: { id: string } }>("/files/:id", async (req, reply) => {
-    const idParse = z.string().uuid().safeParse(req.params.id);
-    if (!idParse.success) return reply.code(400).send(errorPayload("ID do arquivo inválido"))
-    const id = idParse.data;
+    const id = (req.params?.id ?? "").trim();
+    if (!id) return reply.code(400).send(errorPayload("ID do arquivo inválido"));
     const file = await getColl("file_objects").findOne({ _id: id, deleted_at: null } as any) as { gridfs_id?: string } | null;
-    if (!file) return reply.code(404).send(errorPayload("Arquivo não encontrado"))
+    if (!file) return reply.code(404).send(errorPayload("Arquivo não encontrado"));
     const gridfsId = file.gridfs_id;
     if (gridfsId && /^[a-fA-F0-9]{24}$/.test(gridfsId)) {
       try {
