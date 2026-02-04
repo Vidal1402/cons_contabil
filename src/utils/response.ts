@@ -1,12 +1,24 @@
 /**
- * Formato padrão das respostas da API para o frontend.
- *
- * Sucesso: { success: true, data: ... }
- * Erro:    { success: false, error: "mensagem amigável" }
+ * Formato padrão das respostas de erro da API.
+ * Todo erro retorna: success: false, error + description (sempre com descrição clara), e opcionalmente statusCode.
  */
+export type ErrorPayload = {
+  success: false;
+  error: string;
+  description: string;
+  statusCode?: number;
+};
 
-export function errorPayload(message: string): { success: false; error: string } {
-  return { success: false, error: message };
+export function errorPayload(message: string, statusCode?: number): ErrorPayload {
+  const payload: ErrorPayload = {
+    success: false,
+    error: message,
+    description: message
+  };
+  if (typeof statusCode === "number" && statusCode >= 400 && statusCode < 600) {
+    payload.statusCode = statusCode;
+  }
+  return payload;
 }
 
 export function successPayload<T>(data: T): { success: true; data: T } {

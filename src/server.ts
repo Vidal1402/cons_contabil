@@ -94,15 +94,21 @@ export function buildServer() {
     if (fromMessage < 500 && statusCode >= 500) statusCode = fromMessage;
     const safeStatus = Math.min(599, Math.max(400, statusCode));
     const message = safeStatus >= 500 ? "Erro interno. Tente novamente." : msg || "Erro";
-    reply.status(safeStatus).send(errorPayload(message));
+    reply.status(safeStatus).send(errorPayload(message, safeStatus));
   });
 
   app.addHook("onSend", (request, reply, payload, done) => {
     if (reply.sent) return done(null, payload);
     try {
       const body = typeof payload === "string" ? JSON.parse(payload) : payload;
+      // Todo erro: garantir description e statusCode no body (409, 400, 401, etc.)
       if (body && typeof body === "object" && body.success === false) {
-        return done(null, payload);
+        const errBody = {
+          ...body,
+          description: (body as any).description ?? (body as any).error ?? "Erro",
+          statusCode: (body as any).statusCode ?? reply.statusCode
+        };
+        return done(null, JSON.stringify(errBody));
       }
       if (body && typeof body === "object" && body.success === true) {
         return done(null, payload);
@@ -127,7 +133,8 @@ export function buildServer() {
       }
       // Resposta só com { error } → padronizar para { success: false, error }
       if (body && typeof body === "object" && "error" in body && body.success === undefined) {
-        return done(null, JSON.stringify(errorPayload(String(body.error))));
+        const msg = String((body as any).error);
+        return done(null, JSON.stringify({ ...errorPayload(msg), statusCode: reply.statusCode }));
       }
       if (body && typeof body === "object") {
         return done(null, JSON.stringify(successPayload(body)));
