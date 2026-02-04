@@ -40,8 +40,11 @@ export function buildServer() {
   app.register(cors, {
     origin: true,
     credentials: false,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
+    // Incluir DELETE para exclusão de arquivos; formato string evita cache/proxy antigo na preflight
+    methods: "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
+    allowedHeaders: ["Content-Type", "Authorization"],
+    preflight: true,
+    optionsSuccessStatus: 204
   });
 
   app.register(rateLimit, {
