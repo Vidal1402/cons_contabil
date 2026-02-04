@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
@@ -34,10 +34,14 @@ export function buildServer() {
 
   // Troca o parser padrão de application/json para aceitar body vazio (DELETE sem body)
   app.removeContentTypeParser("application/json");
-  app.addContentTypeParser("application/json", { parseAs: "string" }, async (_req, body) => {
-    if (typeof body !== "string" || body.trim() === "") return {};
-    return JSON.parse(body) as object;
-  });
+  app.addContentTypeParser<string>(
+    "application/json",
+    { parseAs: "string" },
+    async (_req: FastifyRequest, body: string) => {
+      if (typeof body !== "string" || body.trim() === "") return {};
+      return JSON.parse(body) as object;
+    }
+  );
 
   app.register(helmet, {
     global: true,
