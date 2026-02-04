@@ -37,19 +37,10 @@ export function buildServer() {
     contentSecurityPolicy: false // API only
   });
 
-  app.register(cors, {
-    origin: true,
-    credentials: false,
-    methods: "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
-    allowedHeaders: ["Content-Type", "Authorization"],
-    preflight: false // preflight respondida pelo hook abaixo
-  });
-
-  // Preflight OPTIONS: responde com headers que incluem DELETE (evita cache/proxy no Render)
-  app.addHook("onRequest", (req, reply, done) => {
-    if (req.method !== "OPTIONS") return done();
+  // Rota OPTIONS registrada ANTES do CORS para garantir preflight com DELETE (admin pode apagar arquivos)
+  app.options("*", (req, reply) => {
     const origin = req.headers.origin || "*";
-    reply
+    return reply
       .header("Access-Control-Allow-Origin", origin)
       .header("Access-Control-Allow-Methods", "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS")
       .header("Access-Control-Allow-Headers", "Content-Type,Authorization")
@@ -57,7 +48,14 @@ export function buildServer() {
       .header("Content-Length", "0")
       .code(204)
       .send();
-    done();
+  });
+
+  app.register(cors, {
+    origin: true,
+    credentials: false,
+    methods: "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
+    allowedHeaders: ["Content-Type", "Authorization"],
+    preflight: false // preflight já respondida pela rota OPTIONS acima
   });
 
   app.register(rateLimit, {
