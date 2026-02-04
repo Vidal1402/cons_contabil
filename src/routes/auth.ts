@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { env } from "../config";
 import { normalizeCnpj, isValidCnpjDigitsOnly } from "../utils/cnpj";
+import { formatZodError } from "../utils/validation";
 import { verifyPassword } from "../security/password";
 import {
   findAdminByEmail,
@@ -35,12 +36,16 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       config: { rateLimit: { max: env.LOGIN_RATE_LIMIT_MAX, timeWindow: `${env.LOGIN_RATE_LIMIT_WINDOW} second` } }
     },
     async (req, reply) => {
-      const body = loginAdminSchema.parse(req.body);
+      const parsed = loginAdminSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: formatZodError(parsed.error) });
+      }
+      const body = parsed.data;
       const email = body.email.toLowerCase();
       const user = await findAdminByEmail(email);
-      if (!user || !user.is_active) return reply.unauthorized("Credenciais inválidas");
+      if (!user || !user.is_active) return reply.code(401).send({ error: "Credenciais inválidas" });
       const ok = await verifyPassword(user.password_hash, body.password);
-      if (!ok) return reply.unauthorized("Credenciais inválidas");
+      if (!ok) return reply.code(401).send({ error: "Credenciais inválidas" });
 
       await touchLastLogin(user.id);
       const accessToken = await signAccessToken({ sub: user.id, role: "ADMIN" });
@@ -71,15 +76,19 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       config: { rateLimit: { max: env.LOGIN_RATE_LIMIT_MAX, timeWindow: `${env.LOGIN_RATE_LIMIT_WINDOW} second` } }
     },
     async (req, reply) => {
-      const body = loginClientSchema.parse(req.body);
+      const parsed = loginClientSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: formatZodError(parsed.error) });
+      }
+      const body = parsed.data;
       const cnpj = normalizeCnpj(body.cnpj);
-      if (!isValidCnpjDigitsOnly(cnpj)) return reply.badRequest("CNPJ inválido");
+      if (!isValidCnpjDigitsOnly(cnpj)) return reply.code(400).send({ error: "CNPJ inválido" });
 
       const row = await findClientByCnpj(cnpj);
-      if (!row || !row.user_active || !row.client_active) return reply.unauthorized("Credenciais inválidas");
+      if (!row || !row.user_active || !row.client_active) return reply.code(401).send({ error: "Credenciais inválidas" });
 
       const ok = await verifyPassword(row.password_hash, body.password);
-      if (!ok) return reply.unauthorized("Credenciais inválidas");
+      if (!ok) return reply.code(401).send({ error: "Credenciais inválidas" });
 
       await touchLastLogin(row.user_id);
       const accessToken = await signAccessToken({ sub: row.user_id, role: "CLIENT", clientId: row.client_id, cnpj });
@@ -105,20 +114,24 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   );
 
   app.post("/refresh", async (req, reply) => {
-    const body = refreshSchema.parse(req.body);
+    const parsed = refreshSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: formatZodError(parsed.error) });
+    }
+    const body = parsed.data;
     const tokenHash = sha256Hex(body.refreshToken);
     const existing = await findRefreshTokenByHash(tokenHash);
-    if (!existing) return reply.unauthorized("Refresh inválido");
-    if (existing.revoked_at) return reply.unauthorized("Refresh revogado");
-    if (new Date(existing.expires_at).getTime() <= Date.now()) return reply.unauthorized("Refresh expirado");
+    if (!existing) return reply.code(401).send({ error: "Refresh inválido" });
+    if (existing.revoked_at) return reply.code(401).send({ error: "Refresh revogado" });
+    if (new Date(existing.expires_at).getTime() <= Date.now()) return reply.code(401).send({ error: "Refresh expirado" });
 
     const info = await getUserRoleAndClient(existing.user_id);
-    if (!info || !info.is_active) return reply.unauthorized("Usuário inativo");
+    if (!info || !info.is_active) return reply.code(401).send({ error: "Usuário inativo" });
 
     if (info.role === "CLIENT") {
-      if (!info.client_id) return reply.unauthorized("Cliente inválido");
+      if (!info.client_id) return reply.code(401).send({ error: "Cliente inválido" });
       const ok = await isClientActive(info.client_id);
-      if (!ok) return reply.unauthorized("Cliente inativo");
+      if (!ok) return reply.code(401).send({ error: "Cliente inativo" });
     }
 
     const newRefreshToken = randomToken(48);
@@ -135,7 +148,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       });
     } catch {
       // evita reutilização (token replay) e condições de corrida
-      return reply.unauthorized("Refresh inválido");
+      return reply.code(401).send({ error: "Refresh inválido" });
     }
 
     const accessToken =
@@ -152,7 +165,11 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/logout", async (req, reply) => {
-    const body = refreshSchema.parse(req.body);
+    const parsed = refreshSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: formatZodError(parsed.error) });
+    }
+    const body = parsed.data;
     const tokenHash = sha256Hex(body.refreshToken);
     const existing = await findRefreshTokenByHash(tokenHash);
     if (existing) await revokeRefreshToken(existing.id);

@@ -10,9 +10,15 @@ export const clientRoutes: FastifyPluginAsync = async (app) => {
     return { userId: req.user!.id, clientId: req.user!.clientId, cnpj: req.user!.cnpj };
   });
 
-  app.get<{ Querystring: { parentId?: string } }>("/folders", async (req) => {
+  app.get<{ Querystring: { parentId?: string } }>("/folders", async (req, reply) => {
     const clientId = req.user!.clientId!;
-    const parentId = req.query.parentId ? z.string().uuid().parse(req.query.parentId) : null;
+    const parentId = req.query.parentId
+      ? (() => {
+          const p = z.string().uuid().safeParse(req.query.parentId);
+          return p.success ? p.data : null;
+        })()
+      : null;
+    if (req.query.parentId && parentId === null) return reply.code(400).send({ error: "ID da pasta inválido" });
 
     const filter: Record<string, unknown> = { client_id: clientId };
     filter.parent_id = parentId ?? null;
@@ -34,10 +40,12 @@ export const clientRoutes: FastifyPluginAsync = async (app) => {
 
   app.get<{ Querystring: { folderId: string } }>("/files", async (req, reply) => {
     const clientId = req.user!.clientId!;
-    const folderId = z.string().uuid().parse(req.query.folderId);
+    const folderIdParse = z.string().uuid().safeParse(req.query.folderId);
+    if (!folderIdParse.success) return reply.code(400).send({ error: "ID da pasta inválido" });
+    const folderId = folderIdParse.data;
 
     const folder = await getColl("folders").findOne({ _id: folderId, client_id: clientId });
-    if (!folder) return reply.notFound("Pasta não encontrada");
+    if (!folder) return reply.code(404).send({ error: "Pasta não encontrada" });
 
     const rows = await getColl("file_objects")
       .find({ client_id: clientId, folder_id: folderId, deleted_at: null })
@@ -57,9 +65,11 @@ export const clientRoutes: FastifyPluginAsync = async (app) => {
 
   app.get<{ Params: { id: string } }>("/files/:id/signed-url", async (req, reply) => {
     const clientId = req.user!.clientId!;
-    const id = z.string().uuid().parse(req.params.id);
+    const idParse = z.string().uuid().safeParse(req.params.id);
+    if (!idParse.success) return reply.code(400).send({ error: "ID do arquivo inválido" });
+    const id = idParse.data;
     const file = await getColl("file_objects").findOne({ ...byId(id), client_id: clientId, deleted_at: null } as any);
-    if (!file) return reply.notFound("Arquivo não encontrado");
+    if (!file) return reply.code(404).send({ error: "Arquivo não encontrado" });
     return reply.send({
       url: `/client/files/${id}/stream`,
       expiresIn: 60
@@ -68,9 +78,11 @@ export const clientRoutes: FastifyPluginAsync = async (app) => {
 
   app.get<{ Params: { id: string } }>("/files/:id/stream", async (req, reply) => {
     const clientId = req.user!.clientId!;
-    const id = z.string().uuid().parse(req.params.id);
+    const idParse = z.string().uuid().safeParse(req.params.id);
+    if (!idParse.success) return reply.code(400).send({ error: "ID do arquivo inválido" });
+    const id = idParse.data;
     const file = await getColl("file_objects").findOne({ ...byId(id), client_id: clientId, deleted_at: null } as any) as { gridfs_id: string; original_filename: string; content_type: string } | null;
-    if (!file) return reply.notFound("Arquivo não encontrado");
+    if (!file) return reply.code(404).send({ error: "Arquivo não encontrado" });
     const stream = gridfs.getDownloadStream(file.gridfs_id);
     reply.header("Content-Type", file.content_type);
     reply.header("Content-Disposition", `inline; filename="${file.original_filename}"`);
