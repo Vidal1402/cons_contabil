@@ -96,6 +96,15 @@ export function buildServer() {
       if (body && typeof body === "object" && body.success === true) {
         return done(null, payload);
       }
+      // Login/refresh: manter formato { tokenType, accessToken, expiresIn, refreshToken } para o frontend
+      if (
+        body &&
+        typeof body === "object" &&
+        "accessToken" in body &&
+        "tokenType" in body
+      ) {
+        return done(null, payload);
+      }
       // Resposta só com { error } → padronizar para { success: false, error }
       if (body && typeof body === "object" && "error" in body && body.success === undefined) {
         return done(null, JSON.stringify(errorPayload(String(body.error))));
