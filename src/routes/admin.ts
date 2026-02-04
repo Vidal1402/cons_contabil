@@ -214,10 +214,10 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { folderId: string } }>("/folders/:folderId/files", async (req, reply) => {
     const folderIdParse = z.string().uuid().safeParse(req.params.folderId);
-    if (!folderIdParse.success) return reply.code(400).send(errorPayload( "ID da pasta inválido")
+    if (!folderIdParse.success) return reply.code(400).send(errorPayload("ID da pasta inválido"));
     const folderId = folderIdParse.data;
     const folder = await getColl("folders").findOne(byId(folderId) as any) as { client_id: string } | null;
-    if (!folder) return reply.code(404).send(errorPayload("Pasta não encontrada"))
+    if (!folder) return reply.code(404).send(errorPayload("Pasta não encontrada"));
     const clientId = folder.client_id;
 
     const part = await req.file();
@@ -254,10 +254,10 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get<{ Params: { folderId: string } }>("/folders/:folderId/files", async (req, reply) => {
     const folderIdParse = z.string().uuid().safeParse(req.params.folderId);
-    if (!folderIdParse.success) return reply.code(400).send(errorPayload( "ID da pasta inválido")
+    if (!folderIdParse.success) return reply.code(400).send(errorPayload("ID da pasta inválido"));
     const folderId = folderIdParse.data;
     const folder = await getColl("folders").findOne(byId(folderId)) as { client_id: string } | null;
-    if (!folder) return reply.code(404).send(errorPayload("Pasta não encontrada"))
+    if (!folder) return reply.code(404).send(errorPayload("Pasta não encontrada"));
     const clientId = folder.client_id;
 
     const rows = await getColl("file_objects")
