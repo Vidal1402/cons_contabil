@@ -40,11 +40,24 @@ export function buildServer() {
   app.register(cors, {
     origin: true,
     credentials: false,
-    // Incluir DELETE para exclusão de arquivos; formato string evita cache/proxy antigo na preflight
     methods: "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
     allowedHeaders: ["Content-Type", "Authorization"],
-    preflight: true,
-    optionsSuccessStatus: 204
+    preflight: false // preflight respondida pelo hook abaixo
+  });
+
+  // Preflight OPTIONS: responde com headers que incluem DELETE (evita cache/proxy no Render)
+  app.addHook("onRequest", (req, reply, done) => {
+    if (req.method !== "OPTIONS") return done();
+    const origin = req.headers.origin || "*";
+    reply
+      .header("Access-Control-Allow-Origin", origin)
+      .header("Access-Control-Allow-Methods", "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS")
+      .header("Access-Control-Allow-Headers", "Content-Type,Authorization")
+      .header("Access-Control-Max-Age", "86400")
+      .header("Content-Length", "0")
+      .code(204)
+      .send();
+    done();
   });
 
   app.register(rateLimit, {
