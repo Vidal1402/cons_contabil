@@ -32,6 +32,16 @@ export function buildServer() {
 
   app.register(sensible);
 
+  // Evita 400 em DELETE (e outros) quando o front envia Content-Type: application/json com body vazio
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
+    if (!body || body.trim() === "") return done(null, {});
+    try {
+      return done(null, JSON.parse(body));
+    } catch (e) {
+      return done(e as Error, undefined);
+    }
+  });
+
   app.register(helmet, {
     global: true,
     contentSecurityPolicy: false // API only
