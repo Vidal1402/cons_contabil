@@ -9,6 +9,7 @@ import { authPlugin } from "./security/auth-middleware";
 import { authRoutes } from "./routes/auth";
 import { adminRoutes } from "./routes/admin";
 import { clientRoutes } from "./routes/client";
+import { errorPayload, successPayload, statusFromMessage } from "./utils/response";
 
 export function buildServer() {
   const app = Fastify({
@@ -67,10 +68,42 @@ export function buildServer() {
   app.setErrorHandler((err, req, reply) => {
     req.log.error({ err }, "request_error");
     if (reply.sent) return;
-    const statusCode = (err as any)?.statusCode ?? 500;
-    const safeStatus = Number.isInteger(statusCode) ? statusCode : 500;
-    const message = safeStatus >= 500 ? "Erro interno" : (err as any)?.message ?? "Erro";
-    reply.status(safeStatus).send({ error: message });
+    const msg = (err as any)?.message ?? "";
+    // Priorizar status derivado da mensagem para erros conhecidos (evita 500 para "Não autenticado" etc.)
+    const fromMessage = statusFromMessage(msg);
+    const fromErr = (err as any)?.statusCode ?? (err as any)?.status;
+    let statusCode =
+      typeof fromErr === "number" && fromErr >= 400 && fromErr < 600
+        ? fromErr
+        : fromMessage;
+    // Se a mensagem é de auth/validação, forçar 4xx (nunca devolver 500 para "Não autenticado")
+    if (fromMessage < 500 && statusCode >= 500) statusCode = fromMessage;
+    const safeStatus = Math.min(599, Math.max(400, statusCode));
+    const message = safeStatus >= 500 ? "Erro interno. Tente novamente." : msg || "Erro";
+    reply.status(safeStatus).send(errorPayload(message));
+  });
+
+  app.addHook("onSend", (request, reply, payload, done) => {
+    if (reply.sent) return done(null, payload);
+    try {
+      const body = typeof payload === "string" ? JSON.parse(payload) : payload;
+      if (body && typeof body === "object" && body.success === false) {
+        return done(null, payload);
+      }
+      if (body && typeof body === "object" && body.success === true) {
+        return done(null, payload);
+      }
+      // Resposta só com { error } → padronizar para { success: false, error }
+      if (body && typeof body === "object" && "error" in body && body.success === undefined) {
+        return done(null, JSON.stringify(errorPayload(String(body.error))));
+      }
+      if (body && typeof body === "object") {
+        return done(null, JSON.stringify(successPayload(body)));
+      }
+    } catch {
+      /* payload não é JSON */
+    }
+    done(null, payload);
   });
 
   return app;
