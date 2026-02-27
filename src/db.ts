@@ -40,6 +40,7 @@ export async function ensureIndexes(): Promise<void> {
   await d.collection("users").createIndex({ cnpj: 1 }, { unique: true, sparse: true });
   await d.collection("clients").createIndex({ cnpj: 1 }, { unique: true });
   await d.collection("clients").createIndex({ user_id: 1 }, { unique: true });
+  await d.collection("clients").createIndex({ archived_at: 1 });
   await d.collection("folders").createIndex({ client_id: 1, parent_id: 1, name: 1 }, { unique: true });
   await d.collection("refresh_tokens").createIndex({ token_hash: 1 }, { unique: true });
   await d.collection("refresh_tokens").createIndex({ user_id: 1 });

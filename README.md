@@ -105,10 +105,13 @@ Authorization: Bearer <ACCESS_TOKEN>
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| GET | `/admin/clients` | Lista clientes |
-| GET | `/admin/clients/:id` | Um cliente |
+| GET | `/admin/clients` | Lista clientes (apenas não arquivados) |
+| GET | `/admin/clients/archived` | Lista clientes arquivados |
+| GET | `/admin/clients/:id` | Um cliente (inclui `archived_at` se arquivado) |
 | POST | `/admin/clients` | Criar cliente |
 | PATCH | `/admin/clients/:id` | Atualizar cliente |
+| POST | `/admin/clients/:id/archive` | Arquivar cliente |
+| POST | `/admin/clients/:id/unarchive` | Desarquivar cliente |
 | POST | `/admin/clients/:clientId/folders` | Criar pasta |
 | GET | `/admin/clients/:clientId/folders?parentId=<uuid>` | Listar pastas |
 | POST | `/admin/folders/:folderId/files` | Upload (multipart, campo `file`) |
@@ -197,7 +200,44 @@ Para baixar: `GET <baseUrl>/client/files/:id/stream` com o mesmo header `Authori
 
 ## Respostas de listagem (exemplo)
 
-**GET /admin/clients** — Resposta:
+**GET /admin/clients** — Lista apenas clientes **não arquivados**. Resposta:
+
+```json
+{
+  "clients": [
+    {
+      "id": "<uuid>",
+      "cnpj": "00000000000000",
+      "name": "Cliente Teste",
+      "is_active": true,
+      "created_at": "2026-01-28T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+**GET /admin/clients/archived** — Lista apenas clientes **arquivados** (não excluídos). Resposta:
+
+```json
+{
+  "clients": [
+    {
+      "id": "<uuid>",
+      "cnpj": "00000000000000",
+      "name": "Cliente Arquivado",
+      "is_active": true,
+      "created_at": "2026-01-28T00:00:00.000Z",
+      "archived_at": "2026-01-28T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+**POST /admin/clients/:id/archive** — Arquivar cliente (não apaga; só remove da lista principal). Sem body. Resposta: `{ "ok": true }`.
+
+**POST /admin/clients/:id/unarchive** — Desarquivar cliente (volta para a lista principal). Sem body. Resposta: `{ "ok": true }`.
+
+**GET /admin/clients/:id** — Resposta do cliente inclui `archived_at` (null se não arquivado, data ISO se arquivado).
 
 ```json
 {

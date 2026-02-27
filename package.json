@@ -14,6 +14,7 @@
     "start": "node dist/index.js",
     "bootstrap-admin": "node dist/scripts/bootstrapAdmin.js",
     "bootstrap-admin:dev": "tsx src/scripts/bootstrapAdmin.ts",
+    "production-admin": "tsx src/scripts/productionAdmin.ts",
     "seed:dev": "tsx src/scripts/seedDev.ts",
     "gen-jwt-keys": "tsx src/scripts/genJwtKeys.ts"
   },

@@ -31,7 +31,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/clients", async () => {
     const rows = await getColl("clients")
-      .find({})
+      .find({ $or: [{ archived_at: null }, { archived_at: { $exists: false } }] })
       .sort({ created_at: -1 })
       .toArray() as Array<{ _id: string; cnpj: string; name: string; is_active: boolean; created_at: Date }>;
     return {
@@ -41,6 +41,24 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         name: r.name,
         is_active: r.is_active,
         created_at: r.created_at
+      }))
+    };
+  });
+
+  /** Lista apenas clientes arquivados (não excluídos, apenas movidos para arquivados). */
+  app.get("/clients/archived", async () => {
+    const rows = await getColl("clients")
+      .find({ archived_at: { $ne: null, $exists: true } })
+      .sort({ archived_at: -1 })
+      .toArray() as Array<{ _id: string; cnpj: string; name: string; is_active: boolean; created_at: Date; archived_at: Date }>;
+    return {
+      clients: rows.map((r) => ({
+        id: r._id,
+        cnpj: r.cnpj,
+        name: r.name,
+        is_active: r.is_active,
+        created_at: r.created_at,
+        archived_at: r.archived_at
       }))
     };
   });
@@ -62,7 +80,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         created_at: client.created_at,
         user_id: client.user_id,
         user_active: user.is_active,
-        last_login_at: user.last_login_at ?? null
+        last_login_at: user.last_login_at ?? null,
+        archived_at: client.archived_at ?? null
       }
     };
   });
@@ -151,6 +170,28 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     } as any);
 
     return { ok: true };
+  });
+
+  /** Arquivar cliente (não exclui; remove da lista principal e coloca em arquivados). */
+  app.post<{ Params: { id: string } }>("/clients/:id/archive", async (req, reply) => {
+    const idParse = z.string().uuid().safeParse(req.params.id);
+    if (!idParse.success) return reply.code(400).send(errorPayload("Erro ao arquivar: ID do cliente inválido."));
+    const id = idParse.data;
+    const client = await getColl("clients").findOne(byId(id));
+    if (!client) return reply.code(404).send(errorPayload("Erro ao arquivar: cliente não encontrado."));
+    await getColl("clients").updateOne(byId(id), { $set: { archived_at: new Date(), updated_at: new Date() } });
+    return reply.send({ ok: true });
+  });
+
+  /** Desarquivar cliente (volta para a lista principal). */
+  app.post<{ Params: { id: string } }>("/clients/:id/unarchive", async (req, reply) => {
+    const idParse = z.string().uuid().safeParse(req.params.id);
+    if (!idParse.success) return reply.code(400).send(errorPayload("Erro ao desarquivar: ID do cliente inválido."));
+    const id = idParse.data;
+    const client = await getColl("clients").findOne(byId(id));
+    if (!client) return reply.code(404).send(errorPayload("Erro ao desarquivar: cliente não encontrado."));
+    await getColl("clients").updateOne(byId(id), { $set: { archived_at: null, updated_at: new Date() } });
+    return reply.send({ ok: true });
   });
 
   app.post<{ Params: { clientId: string } }>("/clients/:clientId/folders", async (req, reply) => {

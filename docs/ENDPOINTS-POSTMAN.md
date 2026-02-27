@@ -133,6 +133,8 @@ Resposta:
 
 #### `GET /admin/clients`
 
+Lista apenas clientes **não arquivados**.
+
 Resposta:
 
 ```json
@@ -149,7 +151,30 @@ Resposta:
 }
 ```
 
+#### `GET /admin/clients/archived`
+
+Lista apenas clientes **arquivados** (não excluídos).
+
+Resposta:
+
+```json
+{
+  "clients": [
+    {
+      "id": "<uuid>",
+      "cnpj": "00000000000000",
+      "name": "Cliente Arquivado",
+      "is_active": true,
+      "created_at": "2026-01-28T00:00:00.000Z",
+      "archived_at": "2026-01-28T12:00:00.000Z"
+    }
+  ]
+}
+```
+
 #### `GET /admin/clients/:id`
+
+Resposta inclui `archived_at` (null se não arquivado, data ISO se arquivado).
 
 Resposta (exemplo):
 
@@ -163,9 +188,30 @@ Resposta (exemplo):
     "created_at": "2026-01-28T00:00:00.000Z",
     "user_id": "<uuid>",
     "user_active": true,
-    "last_login_at": null
+    "last_login_at": null,
+    "archived_at": null
   }
 }
+```
+
+#### `POST /admin/clients/:id/archive`
+
+Arquivar cliente (não exclui; remove da lista principal). Sem body.
+
+Resposta:
+
+```json
+{ "ok": true }
+```
+
+#### `POST /admin/clients/:id/unarchive`
+
+Desarquivar cliente (volta para a lista principal). Sem body.
+
+Resposta:
+
+```json
+{ "ok": true }
 ```
 
 #### `POST /admin/clients`
