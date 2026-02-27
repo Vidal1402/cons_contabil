@@ -29,23 +29,7 @@ const createFolderSchema = z.object({
 export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", app.requireAdmin);
 
-  app.get("/clients", async () => {
-    const rows = await getColl("clients")
-      .find({ $or: [{ archived_at: null }, { archived_at: { $exists: false } }] })
-      .sort({ created_at: -1 })
-      .toArray() as Array<{ _id: string; cnpj: string; name: string; is_active: boolean; created_at: Date }>;
-    return {
-      clients: rows.map((r) => ({
-        id: r._id,
-        cnpj: r.cnpj,
-        name: r.name,
-        is_active: r.is_active,
-        created_at: r.created_at
-      }))
-    };
-  });
-
-  /** Lista apenas clientes arquivados (não excluídos, apenas movidos para arquivados). */
+  /** Lista apenas clientes arquivados. Rota estática antes de /clients/:id para não ser confundida com id="archived". */
   app.get("/clients/archived", async () => {
     const rows = await getColl("clients")
       .find({ archived_at: { $ne: null, $exists: true } })
@@ -59,6 +43,22 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         is_active: r.is_active,
         created_at: r.created_at,
         archived_at: r.archived_at
+      }))
+    };
+  });
+
+  app.get("/clients", async () => {
+    const rows = await getColl("clients")
+      .find({ $or: [{ archived_at: null }, { archived_at: { $exists: false } }] })
+      .sort({ created_at: -1 })
+      .toArray() as Array<{ _id: string; cnpj: string; name: string; is_active: boolean; created_at: Date }>;
+    return {
+      clients: rows.map((r) => ({
+        id: r._id,
+        cnpj: r.cnpj,
+        name: r.name,
+        is_active: r.is_active,
+        created_at: r.created_at
       }))
     };
   });
